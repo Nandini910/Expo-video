@@ -1,74 +1,161 @@
-import { Image, StyleSheet, Platform } from 'react-native';
+import {
+    CameraType,
+    CameraView,
+    useCameraPermissions,
+    useMicrophonePermissions,
+} from "expo-camera";
+import { useState, useRef, LegacyRef } from "react";
+import {
+    Button,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+    Platform,
+} from "react-native";
 
-import { HelloWave } from '@/components/HelloWave';
-import ParallaxScrollView from '@/components/ParallaxScrollView';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
+export default function App() {
+    const [facing, setFacing] = useState("back" as CameraType);
+    const [permission, requestPermission] = useCameraPermissions();
+    const cameraRef = useRef<CameraView>(null);
+    const [video, setVideo] = useState<any>(null);
+    const [recording, setRecording] = useState(false);
+    const [cameraText, setCameraText] = useState("Record Camera" as string);
+    const [miropphonePermission, requestPermissionMic] =
+        useMicrophonePermissions();
 
-export default function HomeScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12'
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-        <ThemedText>
-          Tap the Explore tab to learn more about what's included in this starter app.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          When you're ready, run{' '}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
-  );
+    if (!permission) {
+        // Camera permissions are still loading.
+        return <View />;
+    }
+
+    if (!permission.granted) {
+        // Camera permissions are not granted yet.
+        return (
+            <View style={styles.container}>
+                <Text style={{ textAlign: "center" }}>
+                    We need your permission to show the camera
+                </Text>
+                <Button onPress={requestPermission} title="grant permission" />
+            </View>
+        );
+    }
+
+    function toggleCameraFacing() {
+        setFacing((current) => (current === "back" ? "front" : "back"));
+    }
+    async function askForMicrophonePermissions() {
+        try {
+            if (Platform.OS !== "web") {
+                //const { status } = await Camera.getMicrophonePermissionsAsync()
+                console.log("miropphonePermission", miropphonePermission);
+                let finalStatus = miropphonePermission?.status;
+                if (finalStatus !== "granted") {
+                    //alert('We need microphone  permissions for you to take videos')
+                    //const { status } = await Camera.requestMicrophonePermissionsAsync()
+                    const { status } = await requestPermissionMic();
+                    finalStatus = status;
+                }
+                if (finalStatus !== "granted") {
+                    return false;
+                }
+                return true;
+            }
+        } catch (e) {
+            console.log("Error in asking for microphone permissions", e);
+        }
+    }
+
+    const record = async () => {
+        if (cameraRef) {
+            let localVid;
+            try {
+                if (!recording) {
+                    setRecording(true);
+                    setCameraText("Stop Recording");
+                    console.log("Platform.OS ", Platform.OS === "android");
+
+                    localVid = await cameraRef.current?.recordAsync({
+                        maxDuration: 5,
+                        //quality: Platform.OS === 'android' ? Camera.Constants.VideoQuality['480p'] : Camera.Constants.VideoQuality['480p'],
+                        //quality: "4:3",
+                        //mirror: type === 'front' ? true : false,
+                    });
+                    const video = localVid? localVid : ''
+                        setVideo(video);
+                    console.log("Video recorded", localVid);
+
+                    setRecording(false);
+                } else {
+                    setCameraText("Record Camera");
+                    setRecording(false);
+                    if (localVid) {
+                        const uri = localVid? (localVid as any).uri : ''
+                        setVideo(uri);
+                    }
+                    cameraRef?.current?.stopRecording();
+                }
+            } catch (e) {
+                console.log("Error recording video", e);
+            }
+        }
+    };
+
+    return (
+        <View style={styles.container}>
+            <CameraView
+                style={styles.camera}
+                ref={cameraRef}
+                facing={facing}
+                mode="video"
+            >
+                <View style={styles.buttonContainer}>
+                    <TouchableOpacity style={styles.button} onPress={toggleCameraFacing}>
+                        <Text style={styles.text}>Flip Camera</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.button} onPress={record}>
+                        <Text style={styles.text}>{cameraText}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={styles.button}
+                        onPress={askForMicrophonePermissions}
+                    >
+                        <Text style={styles.text}>Request Mic Perm</Text>
+                    </TouchableOpacity>
+                </View>
+            </CameraView>
+        </View>
+    );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
-  },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-  },
+    container: {
+        flex: 1,
+        justifyContent: "center",
+    },
+    camera: {
+        flex: 1,
+    },
+    buttonContainer: {
+        flex: 1,
+        flexDirection: "row",
+        backgroundColor: "transparent",
+        margin: 30,
+    },
+    button: {
+        flex: 1,
+        alignSelf: "flex-end",
+        alignItems: "center",
+    },
+    button2: {
+        flex: 1,
+        alignSelf: "flex-end",
+        alignItems: "center",
+        marginTop: 10,
+    },
+    text: {
+        fontSize: 24,
+        fontWeight: "bold",
+        color: "white",
+    },
 });
